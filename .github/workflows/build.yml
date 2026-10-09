@@ -1,0 +1,1060 @@
+name: Build APK
+on: [push, workflow_dispatch]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create project files
+        run: |
+          cat > settings.gradle.kts <<'EOF'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositories { google(); mavenCentral() } }
+          rootProject.name = "SanjuSystemX"
+          include(":app")
+          EOF
+          cat > build.gradle.kts <<'EOF'
+          plugins {
+              id("com.android.application") version "8.5.2" apply false
+              id("org.jetbrains.kotlin.android") version "1.9.24" apply false
+          }
+          EOF
+          cat > gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx2g
+          android.useAndroidX=true
+          kotlin.code.style=official
+          EOF
+          mkdir -p app
+          cat > app/build.gradle.kts <<'EOF'
+          plugins {
+              id("com.android.application")
+              id("org.jetbrains.kotlin.android")
+          }
+          android {
+              namespace = "com.sanju.systemx"
+              compileSdk = 34
+              defaultConfig {
+                  applicationId = "com.sanju.systemx"
+                  minSdk = 26
+                  targetSdk = 34
+                  versionCode = 1
+                  versionName = "1.0"
+              }
+              buildTypes { release { isMinifyEnabled = false } }
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+              kotlinOptions { jvmTarget = "17" }
+          }
+          dependencies {
+              implementation("dev.rikka.shizuku:api:13.1.5")
+              implementation("dev.rikka.shizuku:provider:13.1.5")
+          }
+          EOF
+          mkdir -p app/src/main
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.VIBRATE" />
+              <uses-permission android:name="android.permission.KILL_BACKGROUND_PROCESSES" />
+
+              <queries>
+                  <intent>
+                      <action android:name="android.intent.action.MAIN" />
+                      <category android:name="android.intent.category.LAUNCHER" />
+                  </intent>
+                  <package android:name="moe.shizuku.privileged.api" />
+              </queries>
+
+              <application
+                  android:allowBackup="true"
+                  android:icon="@drawable/ic_launcher"
+                  android:label="@string/app_name"
+                  android:theme="@style/SanjuTheme">
+
+                  <activity android:name=".MainActivity" android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+
+                  <activity
+                      android:name=".GameSpaceActivity"
+                      android:exported="false"
+                      android:screenOrientation="sensorLandscape"
+                      android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
+
+                  <provider
+                      android:name="rikka.shizuku.ShizukuProvider"
+                      android:authorities="${applicationId}.shizuku"
+                      android:enabled="true"
+                      android:exported="true"
+                      android:multiprocess="false"
+                      android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
+              </application>
+          </manifest>
+          EOF
+          mkdir -p app/src/main/res/values
+          cat > app/src/main/res/values/strings.xml <<'EOF'
+          <resources><string name="app_name">SanjuSystemX</string></resources>
+          EOF
+          mkdir -p app/src/main/res/values
+          cat > app/src/main/res/values/themes.xml <<'EOF'
+          <resources>
+              <style name="SanjuTheme" parent="@android:style/Theme.DeviceDefault.NoActionBar">
+                  <item name="android:windowBackground">@android:color/black</item>
+                  <item name="android:statusBarColor">@android:color/black</item>
+                  <item name="android:navigationBarColor">@android:color/black</item>
+              </style>
+          </resources>
+          EOF
+          mkdir -p app/src/main/res/drawable
+          cat > app/src/main/res/drawable/ic_launcher.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+              <path android:fillColor="#050805" android:pathData="M0,0h108v108h-108z" />
+              <path android:fillColor="#0F1A12" android:strokeColor="#00FF88" android:strokeWidth="3"
+                  android:pathData="M54,14 L90,34 L90,74 L54,94 L18,74 L18,34 Z" />
+              <path android:fillColor="#00FF88" android:pathData="M58,28 L40,58 L53,58 L48,80 L68,48 L55,48 Z" />
+          </vector>
+          EOF
+          mkdir -p app/src/main/java/com/sanju/systemx
+          cat > app/src/main/java/com/sanju/systemx/MainActivity.kt <<'EOF'
+          package com.sanju.systemx
+
+          import android.app.Activity
+          import android.content.Intent
+          import android.os.Bundle
+          import android.view.Gravity
+          import android.widget.LinearLayout
+          import android.widget.ScrollView
+          import com.sanju.systemx.shizuku.ShizukuBridge
+          import com.sanju.systemx.ui.*
+
+          class MainActivity : Activity() {
+              private lateinit var status: android.widget.TextView
+
+              override fun onCreate(b: Bundle?) {
+                  super.onCreate(b)
+                  val col = LinearLayout(this).apply {
+                      orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
+                      setPadding(dp(32), dp(24), dp(32), dp(24)); setBackgroundColor(C.BG)
+                  }
+                  col.addView(tv("SANJU", 38f, C.GREEN, true, true))
+                  col.addView(tv("SYSTEMX", 38f, C.WHITE, true))
+                  col.addView(tv("GAME SPACE", 14f, C.DIM, true), lp(WRAP, WRAP, t = dp(4)))
+                  status = tv("", 13f, C.DIM)
+                  col.addView(status, lp(WRAP, WRAP, t = dp(24), b = dp(24)))
+                  val open = chip("OPEN GAME SPACE", true).apply {
+                      textSize = 16f; setPadding(dp(32), dp(14), dp(32), dp(14))
+                      setOnClickListener { startActivity(Intent(this@MainActivity, GameSpaceActivity::class.java)) }
+                  }
+                  col.addView(open)
+                  setContentView(ScrollView(this).apply { isFillViewport = true; addView(col, MATCH, MATCH) })
+              }
+
+              override fun onResume() {
+                  super.onResume()
+                  val g = ShizukuBridge.granted()
+                  status.text = if (g) "● SHIZUKU CONNECTED" else "○ SHIZUKU NOT CONNECTED"
+                  status.setTextColor(if (g) C.GREEN else C.DIM)
+              }
+          }
+          EOF
+          mkdir -p app/src/main/java/com/sanju/systemx
+          cat > app/src/main/java/com/sanju/systemx/GameSpaceActivity.kt <<'EOF'
+          package com.sanju.systemx
+
+          import android.app.Activity
+          import android.content.res.ColorStateList
+          import android.graphics.ColorMatrix
+          import android.graphics.ColorMatrixColorFilter
+          import android.graphics.Paint
+          import android.media.AudioManager
+          import android.os.Build
+          import android.os.Bundle
+          import android.os.Handler
+          import android.os.Looper
+          import android.view.Gravity
+          import android.view.View
+          import android.view.WindowManager
+          import android.widget.*
+          import com.sanju.systemx.audio.GameSoundManager
+          import com.sanju.systemx.display.DisplayController
+          import com.sanju.systemx.gaming.Game
+          import com.sanju.systemx.gaming.GameLauncher
+          import com.sanju.systemx.gaming.GameScanner
+          import com.sanju.systemx.monitor.Metrics
+          import com.sanju.systemx.monitor.PerformanceMonitor
+          import com.sanju.systemx.optimizer.BoostEngine
+          import com.sanju.systemx.settings.Prefs
+          import com.sanju.systemx.shizuku.ShizukuBridge
+          import com.sanju.systemx.ui.*
+          import rikka.shizuku.Shizuku
+          import java.util.concurrent.Executors
+
+          class GameSpaceActivity : Activity() {
+              private lateinit var prefs: Prefs
+              private lateinit var sfx: GameSoundManager
+              private lateinit var disp: DisplayController
+              private lateinit var engine: BoostEngine
+              private lateinit var monitor: PerformanceMonitor
+              private val io = Executors.newSingleThreadExecutor()
+              private val ui = Handler(Looper.getMainLooper())
+
+              private var games = listOf<Game>()
+              private var selected: String? = null
+              private var boostActive = false
+              private var lastGranted = false
+
+              private lateinit var root: FrameLayout
+              private lateinit var shizukuTv: TextView
+              private lateinit var boostBtn: TextView
+              private lateinit var boostInfo: TextView
+              private lateinit var gamesRow: LinearLayout
+              private lateinit var hzStatus: TextView
+              private lateinit var host: FrameLayout
+              private val metricTv = HashMap<String, TextView>()
+              private val levelChips = HashMap<Int, TextView>()
+              private val tabs = ArrayList<TextView>()
+              private val pages = ArrayList<View>()
+
+              private val onBinder = Shizuku.OnBinderReceivedListener { runOnUiThread { refreshShizuku(true) } }
+              private val onDead = Shizuku.OnBinderDeadListener { runOnUiThread { refreshShizuku(false) } }
+              private val onPerm = Shizuku.OnRequestPermissionResultListener { _, _ -> runOnUiThread { refreshShizuku(true) } }
+
+              override fun onCreate(b: Bundle?) {
+                  super.onCreate(b)
+                  prefs = Prefs(this); sfx = GameSoundManager(this, prefs)
+                  disp = DisplayController(this); engine = BoostEngine(this)
+                  monitor = PerformanceMonitor(this) { m -> showMetrics(m) }
+                  window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                  if (Build.VERSION.SDK_INT >= 28)
+                      window.attributes.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                  immersive()
+                  try {
+                      Shizuku.addBinderReceivedListenerSticky(onBinder)
+                      Shizuku.addBinderDeadListener(onDead)
+                      Shizuku.addRequestPermissionResultListener(onPerm)
+                  } catch (t: Throwable) { }
+                  setContentView(build())
+                  refreshShizuku(false)
+                  loadGames()
+                  applyVisuals()
+                  if (prefs.anim) intro() else sfx.play("open")
+              }
+
+              override fun onResume() { super.onResume(); immersive(); if (prefs.monitor) monitor.start() }
+              override fun onPause() { super.onPause(); monitor.stop() } // no polling while a game is in front
+              override fun onDestroy() {
+                  super.onDestroy(); monitor.stop()
+                  try {
+                      Shizuku.removeBinderReceivedListener(onBinder); Shizuku.removeBinderDeadListener(onDead)
+                      Shizuku.removeRequestPermissionResultListener(onPerm)
+                  } catch (t: Throwable) { }
+              }
+
+              @Suppress("DEPRECATION")
+              private fun immersive() {
+                  window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+                      View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+              }
+
+              private fun View.press(kind: String = "click", f: () -> Unit) =
+                  setOnClickListener { sfx.play(kind); sfx.haptic(); f() }
+
+              // ------------------------------------------------------------------ layout
+              private fun build(): View {
+                  root = FrameLayout(this).apply { setBackgroundColor(C.BG) }
+                  val main = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(dp(28), dp(12), dp(28), dp(12)) }
+
+                  // LEFT: branding + shizuku + boost
+                  val left = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+                  left.addView(tv("SANJU SYSTEMX", 20f, C.GREEN, true, true))
+                  left.addView(tv("GAME SPACE  ·  SYSTEM READY", 11f, C.DIM, true))
+                  shizukuTv = tv("", 12f, C.DIM, true).apply {
+                      setPadding(dp(12), dp(8), dp(12), dp(8)); background = shape(C.CARD, C.DARKGREEN, 12)
+                      setOnClickListener { sfx.haptic(); onShizukuTap() }
+                  }
+                  left.addView(shizukuTv, lp(MATCH, WRAP, t = dp(10)))
+
+                  boostBtn = tv("BOOST READY", 20f, C.GREEN, true, true).apply {
+                      gravity = Gravity.CENTER; setPadding(dp(8), dp(16), dp(8), dp(16))
+                      background = shape(C.CARD, C.GREEN, 16, 2)
+                      setOnClickListener { sfx.haptic(true); toggleBoost() }
+                  }
+                  left.addView(boostBtn, lp(MATCH, WRAP, t = dp(10)))
+                  val chips = LinearLayout(this).apply { gravity = Gravity.CENTER }
+                  for (lv in listOf(40, 60, 80, 100)) {
+                      val c = chip("$lv%", prefs.boostLevel == lv)
+                      c.setOnClickListener {
+                          sfx.play("click"); sfx.haptic(); prefs.boostLevel = lv
+                          levelChips.forEach { (k, v) -> v.styleChip(k == lv, this) }
+                          if (boostActive) activateBoost(selected, quiet = true)
+                      }
+                      levelChips[lv] = c
+                      chips.addView(c, lp(WRAP, WRAP, l = dp(3), r = dp(3)))
+                  }
+                  left.addView(chips, lp(MATCH, WRAP, t = dp(8)))
+                  boostInfo = tv("Pick an intensity, then tap BOOST.", 11f, C.DIM)
+                  left.addView(ScrollView(this).apply { addView(boostInfo) }, lp(MATCH, 0, 1f, t = dp(8)))
+                  main.addView(left, lp(0, MATCH, 0.36f, r = dp(16)))
+
+                  // RIGHT: metrics + tabs + pages
+                  val right = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+                  val metrics = LinearLayout(this).apply { background = shape(C.CARD, C.DARKGREEN, 14); setPadding(dp(6), dp(6), dp(6), dp(6)) }
+                  for (k in listOf("FPS", "HZ", "CPU", "RAM", "TEMP")) {
+                      val cell = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
+                      cell.addView(tv(k, 10f, C.DIM, true))
+                      val v = tv("--", 17f, C.GREEN, true, true); metricTv[k] = v; cell.addView(v)
+                      metrics.addView(cell, lp(0, WRAP, 1f))
+                  }
+                  right.addView(metrics, lp(MATCH, WRAP))
+
+                  val tabRow = LinearLayout(this)
+                  host = FrameLayout(this)
+                  pages.addAll(listOf(gamesPage(), displayPage(), settingsPage()))
+                  listOf("GAMES", "DISPLAY", "SETTINGS").forEachIndexed { i, name ->
+                      val t = chip(name, i == 0); t.setOnClickListener { sfx.play("click"); sfx.haptic(); selectTab(i) }
+                      tabs.add(t); tabRow.addView(t, lp(WRAP, WRAP, r = dp(6)))
+                  }
+                  right.addView(tabRow, lp(MATCH, WRAP, t = dp(8), b = dp(8)))
+                  right.addView(host, lp(MATCH, 0, 1f))
+                  selectTab(0)
+                  main.addView(right, lp(0, MATCH, 0.64f))
+
+                  root.addView(main, MATCH, MATCH)
+                  return root
+              }
+
+              private fun selectTab(i: Int) {
+                  host.removeAllViews(); host.addView(pages[i], MATCH, MATCH)
+                  tabs.forEachIndexed { k, t -> t.styleChip(k == i, this) }
+              }
+
+              private fun switchRow(label: String, sub: String, init: Boolean, onChange: (Boolean) -> Unit): View {
+                  val row = LinearLayout(this).apply {
+                      gravity = Gravity.CENTER_VERTICAL; setPadding(dp(14), dp(8), dp(14), dp(8))
+                      background = shape(C.CARD, C.DARKGREEN, 12)
+                  }
+                  val labels = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+                  labels.addView(tv(label, 13f, C.WHITE, true))
+                  if (sub.isNotEmpty()) labels.addView(tv(sub, 10f, C.DIM))
+                  row.addView(labels, lp(0, WRAP, 1f))
+                  val sw = Switch(this).apply {
+                      isChecked = init
+                      val states = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf())
+                      thumbTintList = ColorStateList(states, intArrayOf(C.GREEN, C.DIM))
+                      trackTintList = ColorStateList(states, intArrayOf(C.DARKGREEN, C.CARD))
+                      setOnCheckedChangeListener { _, on -> sfx.play(if (on) "on" else "off"); sfx.haptic(); onChange(on) }
+                  }
+                  row.addView(sw)
+                  return row
+              }
+
+              private fun vstack(vararg views: View): ScrollView {
+                  val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+                  views.forEach { col.addView(it, lp(MATCH, WRAP, b = dp(6))) }
+                  return ScrollView(this).apply { addView(col) }
+              }
+
+              // ------------------------------------------------------------------ pages
+              private fun gamesPage(): View {
+                  val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+                  val head = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+                  head.addView(tv("MY GAMES", 14f, C.GREEN, true, true), lp(0, WRAP, 1f))
+                  head.addView(tv("SHOW ALL APPS", 10f, C.DIM, true), lp(WRAP, WRAP, r = dp(6)))
+                  head.addView(Switch(this).apply {
+                      isChecked = prefs.showAll
+                      setOnCheckedChangeListener { _, on -> sfx.play(if (on) "on" else "off"); prefs.showAll = on; loadGames() }
+                  })
+                  col.addView(head, lp(MATCH, WRAP, b = dp(6)))
+                  gamesRow = LinearLayout(this)
+                  col.addView(HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(gamesRow) }, lp(MATCH, MATCH))
+                  return col
+              }
+
+              private fun loadGames() {
+                  io.execute {
+                      val list = GameScanner(this).scan(prefs.showAll)
+                      ui.post {
+                          games = list
+                          if (selected == null || list.none { it.pkg == selected }) selected = list.firstOrNull()?.pkg
+                          renderGames()
+                      }
+                  }
+              }
+
+              private fun renderGames() {
+                  gamesRow.removeAllViews()
+                  if (games.isEmpty()) {
+                      gamesRow.addView(tv("No games detected.\nTurn on SHOW ALL APPS to pick any app.", 12f, C.DIM)); return
+                  }
+                  for (g in games) {
+                      val sel = g.pkg == selected
+                      val card = LinearLayout(this).apply {
+                          orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL
+                          setPadding(dp(10), dp(12), dp(10), dp(10))
+                          background = shape(C.CARD, if (sel) C.GREEN else C.DARKGREEN, 16, if (sel) 2 else 1)
+                          setOnClickListener { sfx.play("click"); sfx.haptic(); selected = g.pkg; renderGames() }
+                      }
+                      card.addView(ImageView(this).apply { setImageDrawable(g.icon) }, lp(dp(52), dp(52)))
+                      card.addView(tv(g.name, 11f, C.WHITE, true).apply {
+                          maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END; gravity = Gravity.CENTER
+                      }, lp(MATCH, dp(34), t = dp(6)))
+                      card.addView(chip("PLAY", true).apply { setOnClickListener { play(g) } }, lp(MATCH, WRAP, t = dp(4)))
+                      gamesRow.addView(card, lp(dp(120), WRAP, r = dp(10)))
+                  }
+              }
+
+              private fun displayPage(): View {
+                  val sup = disp.supported()
+                  hzStatus = tv("Current display rate: ${disp.current()} Hz", 11f, C.DIM)
+                  val hzRow = LinearLayout(this)
+                  for (hz in listOf(60, 90, 120)) {
+                      val c = chip("$hz Hz", false)
+                      if (hz !in sup) c.alpha = 0.35f
+                      c.setOnClickListener {
+                          sfx.play("click"); sfx.haptic()
+                          if (hz !in sup) { hzStatus.text = "$hz Hz: NOT SUPPORTED ON THIS DEVICE"; return@setOnClickListener }
+                          hzStatus.text = "Applying $hz Hz…"
+                          io.execute { val m = disp.setRate(hz); ui.post { hzStatus.text = m; sfx.play(if (m.startsWith("Display now")) "on" else "error") } }
+                      }
+                      hzRow.addView(c, lp(WRAP, WRAP, r = dp(6)))
+                  }
+                  hzRow.addView(chip("DEFAULT", false).apply {
+                      setOnClickListener {
+                          sfx.play("click"); sfx.haptic()
+                          io.execute { val m = disp.reset(); ui.post { hzStatus.text = m } }
+                      }
+                  })
+                  val refresh = LinearLayout(this).apply {
+                      orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(10), dp(14), dp(10)); background = shape(C.CARD, C.DARKGREEN, 12)
+                  }
+                  refresh.addView(tv("REFRESH RATE", 12f, C.GREEN, true))
+                  refresh.addView(hzRow, lp(WRAP, WRAP, t = dp(6), b = dp(6)))
+                  refresh.addView(hzStatus)
+                  refresh.addView(tv("Changing the rate requires Shizuku; the result is verified, not assumed.", 10f, C.DIM))
+
+                  val dm = resources.displayMetrics
+                  val res = tv("RESOLUTION\nDEVICE DEFAULT (${dm.widthPixels}×${dm.heightPixels})\nAdvanced resolution control: unavailable on this build", 11f, C.DIM)
+                      .apply { setPadding(dp(14), dp(10), dp(14), dp(10)); background = shape(C.CARD, C.DARKGREEN, 12) }
+
+                  val am = getSystemService(AudioManager::class.java)
+                  val vol = LinearLayout(this).apply {
+                      orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(10), dp(14), dp(10)); background = shape(C.CARD, C.DARKGREEN, 12)
+                  }
+                  vol.addView(tv("MEDIA VOLUME", 12f, C.GREEN, true))
+                  vol.addView(SeekBar(this).apply {
+                      max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC); progress = am.getStreamVolume(AudioManager.STREAM_MUSIC)
+                      progressTintList = ColorStateList.valueOf(C.GREEN); thumbTintList = ColorStateList.valueOf(C.GREEN)
+                      setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                          override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                              if (fromUser) try { am.setStreamVolume(AudioManager.STREAM_MUSIC, p, 0) } catch (t: Throwable) { }
+                          }
+                          override fun onStartTrackingTouch(s: SeekBar?) {}
+                          override fun onStopTrackingTouch(s: SeekBar?) {}
+                      })
+                  })
+
+                  return vstack(
+                      refresh, res, vol,
+                      tv("GAME VISUALS  (applied to Game Space UI only)", 11f, C.GREEN, true),
+                      switchRow("VIVID COLOR", "", prefs.vivid) { prefs.vivid = it; applyVisuals() },
+                      switchRow("CINEMATIC", "", prefs.cinematic) { prefs.cinematic = it; applyVisuals() },
+                      switchRow("CONTRAST", "", prefs.contrast) { prefs.contrast = it; applyVisuals() }
+                  )
+              }
+
+              private fun settingsPage(): View = vstack(
+                  switchRow("SOUND EFFECTS", "Game Space sounds", prefs.sound) { prefs.sound = it },
+                  switchRow("HAPTIC FEEDBACK", "Light vibration on buttons / boost / launch", prefs.haptic) { prefs.haptic = it },
+                  switchRow("AUTO BOOST", "Apply boost automatically when pressing PLAY", prefs.autoBoost) { prefs.autoBoost = it },
+                  switchRow("GAME SPACE ANIMATION", "Short startup animation", prefs.anim) { prefs.anim = it },
+                  switchRow("PERFORMANCE MONITOR", "Polls every 2 s while Game Space is open", prefs.monitor) {
+                      prefs.monitor = it; if (it) monitor.start() else { monitor.stop(); showMetrics(Metrics()) }
+                  },
+                  tv("Boost level is chosen with the 40/60/80/100% chips on the left.", 10f, C.DIM)
+              )
+
+              // ------------------------------------------------------------------ behaviour
+              private fun showMetrics(m: Metrics) {
+                  metricTv["FPS"]?.text = m.fps; metricTv["HZ"]?.text = m.hz; metricTv["CPU"]?.text = m.cpu
+                  metricTv["RAM"]?.text = m.ram; metricTv["TEMP"]?.text = m.temp
+              }
+
+              private fun refreshShizuku(sound: Boolean) {
+                  val g = ShizukuBridge.granted()
+                  val r = ShizukuBridge.running()
+                  shizukuTv.text = if (g) "● SHIZUKU CONNECTED" else
+                      "○ SHIZUKU NOT CONNECTED" + if (r) "  (tap to grant)" else "  (tap to open Shizuku)"
+                  shizukuTv.setTextColor(if (g) C.GREEN else C.DIM)
+                  if (sound && g && !lastGranted) sfx.play("shizuku")
+                  lastGranted = g
+              }
+
+              private fun onShizukuTap() {
+                  when {
+                      ShizukuBridge.granted() -> refreshShizuku(false)
+                      ShizukuBridge.running() -> ShizukuBridge.requestPermission()
+                      else -> if (!GameLauncher.launch(this, "moe.shizuku.privileged.api"))
+                          Toast.makeText(this, "Shizuku is not installed", Toast.LENGTH_SHORT).show()
+                  }
+              }
+
+              private fun setBoostUi(active: Boolean, info: String) {
+                  boostActive = active
+                  boostBtn.text = if (active) "BOOST ACTIVE" else "BOOST READY"
+                  boostBtn.background = shape(if (active) C.DARKGREEN else C.CARD, C.GREEN, 16, 2)
+                  boostInfo.text = info
+              }
+
+              private fun toggleBoost() {
+                  if (boostActive) {
+                      sfx.play("off"); setBoostUi(false, "Boost stopped; temporary settings restored.")
+                      io.execute { engine.stop() }
+                  } else activateBoost(selected)
+              }
+
+              private fun activateBoost(pkg: String?, quiet: Boolean = false, then: (() -> Unit)? = null) {
+                  if (!quiet) sfx.play("boost")
+                  boostBtn.text = "APPLYING…"; boostBtn.isEnabled = false
+                  val level = prefs.boostLevel
+                  io.execute {
+                      val r = try { engine.apply(level, pkg) } catch (t: Throwable) { null }
+                      ui.post {
+                          boostBtn.isEnabled = true
+                          if (r == null || r.applied.isEmpty()) {
+                              setBoostUi(false, "No optimization could be applied.\n" + (r?.unavailable?.joinToString("\n") { "✗ $it" } ?: "OPTIMIZATION UNAVAILABLE"))
+                              sfx.play("error")
+                          } else {
+                              val head = "Optimizations applied: ${r.applied.size}" +
+                                  if (r.unavailable.isNotEmpty()) "\nSome optimizations unavailable on this device." else ""
+                              setBoostUi(true, head + "\n\n" + r.applied.joinToString("\n") { "✓ $it" } +
+                                  (if (r.unavailable.isNotEmpty()) "\n" + r.unavailable.joinToString("\n") { "✗ $it" } else ""))
+                          }
+                          then?.invoke()
+                      }
+                  }
+              }
+
+              private fun play(g: Game) {
+                  sfx.play("launch"); sfx.haptic(true); selected = g.pkg
+                  flash("LAUNCHING  " + g.name.uppercase())
+                  if (boostActive || prefs.autoBoost) activateBoost(g.pkg, quiet = true) { launch(g) }
+                  else ui.postDelayed({ launch(g) }, 450)
+              }
+
+              private fun launch(g: Game) {
+                  if (!GameLauncher.launch(this, g.pkg)) {
+                      sfx.play("error"); Toast.makeText(this, "Could not launch ${g.name}", Toast.LENGTH_SHORT).show()
+                  }
+              }
+
+              // ------------------------------------------------------------------ visuals / animations
+              private fun applyVisuals() {
+                  val cm = ColorMatrix()
+                  if (prefs.vivid) cm.postConcat(ColorMatrix().apply { setSaturation(1.5f) })
+                  if (prefs.cinematic) {
+                      cm.postConcat(ColorMatrix().apply { setSaturation(0.85f) })
+                      cm.postConcat(ColorMatrix(floatArrayOf(1.05f, 0f, 0f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f, 0f, 1.08f, 0f, 6f, 0f, 0f, 0f, 1f, 0f)))
+                  }
+                  if (prefs.contrast) {
+                      val c = 1.25f; val t = (-0.5f * c + 0.5f) * 255f
+                      cm.postConcat(ColorMatrix(floatArrayOf(c, 0f, 0f, 0f, t, 0f, c, 0f, 0f, t, 0f, 0f, c, 0f, t, 0f, 0f, 0f, 1f, 0f)))
+                  }
+                  if (!prefs.vivid && !prefs.cinematic && !prefs.contrast) root.setLayerType(View.LAYER_TYPE_NONE, null)
+                  else root.setLayerType(View.LAYER_TYPE_HARDWARE, Paint().apply { colorFilter = ColorMatrixColorFilter(cm) })
+              }
+
+              private fun overlay(lines: List<Triple<String, Float, Int>>, holdMs: Long, fadeMs: Long) {
+                  val ov = FrameLayout(this).apply { setBackgroundColor(C.BG); isClickable = true }
+                  val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
+                  lines.forEach { (t, s, c) -> col.addView(tv(t, s, c, true, c == C.GREEN).apply { gravity = Gravity.CENTER }) }
+                  ov.addView(col, FrameLayout.LayoutParams(MATCH, MATCH))
+                  root.addView(ov, MATCH, MATCH)
+                  col.alpha = 0f; col.scaleX = 0.92f; col.scaleY = 0.92f
+                  col.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(fadeMs).withEndAction {
+                      ov.animate().alpha(0f).setStartDelay(holdMs).setDuration(fadeMs).withEndAction { root.removeView(ov) }.start()
+                  }.start()
+              }
+
+              private fun intro() {
+                  sfx.play("open")
+                  overlay(listOf(Triple("SANJU", 34f, C.GREEN), Triple("SYSTEMX", 34f, C.WHITE), Triple("GAME SPACE", 14f, C.DIM)), 300, 300)
+              }
+
+              private fun flash(text: String) = overlay(listOf(Triple(text, 18f, C.GREEN)), 150, 200)
+          }
+          EOF
+          mkdir -p app/src/main/java/com/sanju/systemx/audio
+          cat > app/src/main/java/com/sanju/systemx/audio/GameSoundManager.kt <<'EOF'
+          package com.sanju.systemx.audio
+
+          import android.content.Context
+          import android.media.AudioAttributes
+          import android.media.AudioFormat
+          import android.media.AudioTrack
+          import android.os.VibrationEffect
+          import android.os.Vibrator
+          import com.sanju.systemx.settings.Prefs
+          import java.util.concurrent.Executors
+          import kotlin.math.PI
+          import kotlin.math.sin
+
+          /** Original synthesized sound effects (no audio files, no copyrighted material) + light haptics. */
+          class GameSoundManager(ctx: Context, private val prefs: Prefs) {
+              private val ex = Executors.newSingleThreadExecutor()
+              private val vib: Vibrator? = try { ctx.getSystemService(Vibrator::class.java) } catch (t: Throwable) { null }
+              private val sr = 22050
+
+              // (startHz, endHz, durationMs); 0 Hz = silence
+              private val sounds = mapOf(
+                  "open" to listOf(Triple(180, 700, 170), Triple(700, 1400, 130), Triple(1400, 1400, 90)),
+                  "click" to listOf(Triple(1300, 1300, 22)),
+                  "on" to listOf(Triple(600, 1000, 70)),
+                  "off" to listOf(Triple(1000, 500, 70)),
+                  "boost" to listOf(Triple(300, 1600, 230), Triple(1600, 1600, 70)),
+                  "launch" to listOf(Triple(500, 1900, 220), Triple(1900, 1900, 60)),
+                  "shizuku" to listOf(Triple(880, 880, 60), Triple(0, 0, 30), Triple(1320, 1320, 90)),
+                  "error" to listOf(Triple(320, 320, 120), Triple(0, 0, 30), Triple(220, 220, 170))
+              )
+
+              fun play(kind: String) {
+                  if (!prefs.sound) return
+                  val seq = sounds[kind] ?: return
+                  ex.execute { try { tone(seq) } catch (t: Throwable) { } }
+              }
+
+              fun haptic(strong: Boolean = false) {
+                  if (!prefs.haptic) return
+                  try { vib?.vibrate(VibrationEffect.createOneShot(if (strong) 35L else 14L, VibrationEffect.DEFAULT_AMPLITUDE)) }
+                  catch (t: Throwable) { }
+              }
+
+              private fun tone(seq: List<Triple<Int, Int, Int>>) {
+                  val data = ArrayList<Short>()
+                  var phase = 0.0
+                  for ((f0, f1, ms) in seq) {
+                      val n = sr * ms / 1000
+                      for (i in 0 until n) {
+                          val f = f0 + (f1 - f0) * i.toDouble() / n
+                          phase += 2 * PI * f / sr
+                          val edge = minOf(i, n - i, sr / 125).toDouble() / (sr / 125) // ~8ms fade in/out
+                          val amp = if (f0 == 0) 0.0 else 0.30 * edge
+                          data.add((sin(phase) * amp * Short.MAX_VALUE).toInt().toShort())
+                      }
+                  }
+                  val pcm = data.toShortArray()
+                  val track = AudioTrack.Builder()
+                      .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_GAME)
+                          .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
+                      .setAudioFormat(AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                          .setSampleRate(sr).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build())
+                      .setBufferSizeInBytes(pcm.size * 2)
+                      .setTransferMode(AudioTrack.MODE_STATIC).build()
+                  track.write(pcm, 0, pcm.size)
+                  track.play()
+                  Thread.sleep(pcm.size * 1000L / sr + 80)
+                  track.release()
+              }
+          }
+          EOF
+          mkdir -p app/src/main/java/com/sanju/systemx/display
+          cat > app/src/main/java/com/sanju/systemx/display/DisplayController.kt <<'EOF'
+          package com.sanju.systemx.display
+
+          import android.content.Context
+          import android.hardware.display.DisplayManager
+          import android.view.Display
+          import com.sanju.systemx.shizuku.ShizukuBridge
+
+          class DisplayController(private val ctx: Context) {
+              private fun d(): Display = ctx.getSystemService(DisplayManager::class.java).getDisplay(Display.DEFAULT_DISPLAY)
+
+              fun current(): Int = try { Math.round(d().refreshRate) } catch (t: Throwable) { 0 }
+              fun supported(): Set<Int> = try { d().supportedModes.map { Math.round(it.refreshRate) }.toSet() } catch (t: Throwable) { emptySet() }
+
+              /** Blocking. Writes min/peak refresh settings via Shizuku, then verifies what the display reports. */
+              fun setRate(hz: Int): String {
+                  if (!ShizukuBridge.granted()) return "UNAVAILABLE — requires Shizuku"
+                  if (hz !in supported()) return "NOT SUPPORTED ON THIS DEVICE"
+                  val r = ShizukuBridge.run("settings put system min_refresh_rate $hz && settings put system peak_refresh_rate $hz")
+                  if (r == null || !r.ok) return "OPTIMIZATION UNAVAILABLE"
+                  Thread.sleep(1200)
+                  val now = current()
+                  return if (now == hz) "Display now at $hz Hz"
+                  else "Setting written, but display reports $now Hz (this device may ignore it)"
+              }
+
+              fun reset(): String {
+                  if (!ShizukuBridge.granted()) return "UNAVAILABLE — requires Shizuku"
+                  val r = ShizukuBridge.run("settings delete system min_refresh_rate; settings delete system peak_refresh_rate")
+                  return if (r != null && r.code == 0) "Refresh rate back to device default" else "OPTIMIZATION UNAVAILABLE"
+              }
+          }
+          EOF
+          mkdir -p app/src/main/java/com/sanju/systemx/gaming
+          cat > app/src/main/java/com/sanju/systemx/gaming/GameLauncher.kt <<'EOF'
+          package com.sanju.systemx.gaming
+
+          import android.content.Context
+          import android.content.Intent
+
+          object GameLauncher {
+              fun launch(ctx: Context, pkg: String): Boolean = try {
+                  val i = ctx.packageManager.getLaunchIntentForPackage(pkg)
+                  if (i == null) false else { i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); ctx.startActivity(i); true }
+              } catch (t: Throwable) { false }
+          }
+          EOF
+          mkdir -p app/src/main/java/com/sanju/systemx/gaming
+          cat > app/src/main/java/com/sanju/systemx/gaming/GameScanner.kt <<'EOF'
+          package com.sanju.systemx.gaming
+
+          import android.content.Context
+          import android.content.Intent
+          import android.content.pm.ApplicationInfo
+          import android.graphics.drawable.Drawable
+
+          class Game(val pkg: String, val name: String, val icon: Drawable)
+
+          class GameScanner(private val ctx: Context) {
+              private val priority = "com.mobile.legends" // Mobile Legends: Bang Bang first, if installed
+              private val known = setOf(
+                  priority, "com.tencent.ig", "com.pubg.imobile", "com.dts.freefireth", "com.dts.freefiremax",
+                  "com.activision.callofduty.shooter", "com.garena.game.codm", "com.miHoYo.GenshinImpact",
+                  "com.supercell.clashofclans", "com.supercell.brawlstars", "com.roblox.client"
+              )
+
+              @Suppress("DEPRECATION")
+              fun scan(showAll: Boolean): List<Game> = try {
+                  val pm = ctx.packageManager
+                  val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+                  pm.queryIntentActivities(intent, 0)
+                      .mapNotNull { ri ->
+                          val ai = ri.activityInfo.applicationInfo
+                          val pkg = ai.packageName
+                          if (pkg == ctx.packageName) return@mapNotNull null
+                          val isGame = ai.category == ApplicationInfo.CATEGORY_GAME ||
+                              (ai.flags and ApplicationInfo.FLAG_IS_GAME) != 0 || pkg in known
+                          if (!isGame && !showAll) return@mapNotNull null
+                          Game(pkg, ri.loadLabel(pm).toString(), ri.loadIcon(pm))
+                      }
+                      .distinctBy { it.pkg }
+                      .sortedWith(compareBy({ it.pkg != priority }, { it.name.lowercase() }))
+              } catch (t: Throwable) { emptyList() }
+          }
+          EOF
+          mkdir -p app/src/main/java/com/sanju/systemx/monitor
+          cat > app/src/main/java/com/sanju/systemx/monitor/PerformanceMonitor.kt <<'EOF'
+          package com.sanju.systemx.monitor
+
+          import android.app.ActivityManager
+          import android.content.Context
+          import android.content.Intent
+          import android.content.IntentFilter
+          import android.hardware.display.DisplayManager
+          import android.os.BatteryManager
+          import android.os.Handler
+          import android.os.Looper
+          import android.view.Display
+          import com.sanju.systemx.shizuku.ShizukuBridge
+          import java.util.concurrent.Executors
+          import java.util.concurrent.ScheduledExecutorService
+          import java.util.concurrent.TimeUnit
+
+          /** FPS is never faked: true per-game FPS isn't accessible to a normal app, so it stays "--". */
+          class Metrics(val fps: String = "--", val hz: String = "--", val cpu: String = "--",
+                        val ram: String = "--", val temp: String = "--")
+
+          class PerformanceMonitor(private val ctx: Context, private val onUpdate: (Metrics) -> Unit) {
+              private var ex: ScheduledExecutorService? = null
+              private val main = Handler(Looper.getMainLooper())
+              private var lastTotal = 0L
+              private var lastIdle = 0L
+
+              fun start() {
+                  if (ex != null) return
+                  lastTotal = 0L
+                  ex = Executors.newSingleThreadScheduledExecutor().also {
+                      it.scheduleWithFixedDelay({
+                          try { val m = read(); main.post { onUpdate(m) } } catch (t: Throwable) { }
+                      }, 0, 2, TimeUnit.SECONDS)
+                  }
+              }
+
+              fun stop() { ex?.shutdownNow(); ex = null }
+
+              private fun read() = Metrics(hz = hz(), cpu = cpu(), ram = ram(), temp = temp())
+
+              private fun hz(): String = try {
+                  val d = ctx.getSystemService(DisplayManager::class.java).getDisplay(Display.DEFAULT_DISPLAY)
+                  Math.round(d.refreshRate).toString()
+              } catch (t: Throwable) { "--" }
+
+              private fun ram(): String = try {
+                  val mi = ActivityManager.MemoryInfo()
+                  ctx.getSystemService(ActivityManager::class.java).getMemoryInfo(mi)
+                  "${100 * (mi.totalMem - mi.availMem) / mi.totalMem}%"
+              } catch (t: Throwable) { "--" }
+
+              private fun temp(): String = try {
+                  val t = ctx.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+                      ?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1) ?: -1
+                  if (t <= 0) "--" else "%.0f°C".format(t / 10.0) // battery temperature
+              } catch (t: Throwable) { "--" }
+
+              /** /proc/stat is blocked for normal apps on Android 8+, so CPU needs Shizuku; otherwise "--". */
+              private fun cpu(): String = try {
+                  val r = ShizukuBridge.run("head -n1 /proc/stat")
+                  if (r == null || !r.ok) "--" else {
+                      val p = r.out.split(Regex("\\s+")).drop(1).mapNotNull { it.toLongOrNull() }
+                      if (p.size < 5) "--" else {
+                          val idle = p[3] + p[4]
+                          val total = p.take(8).sum()
+                          val dT = total - lastTotal
+                          val dI = idle - lastIdle
+                          val res = if (lastTotal > 0 && dT > 0) "${100 * (dT - dI) / dT}%" else "--"
+                          lastTotal = total; lastIdle = idle
+                          res
+                      }
+                  }
+              } catch (t: Throwable) { "--" }
+          }
+          EOF
+          mkdir -p app/src/main/java/com/sanju/systemx/optimizer
+          cat > app/src/main/java/com/sanju/systemx/optimizer/BoostEngine.kt <<'EOF'
+          package com.sanju.systemx.optimizer
+
+          import android.app.ActivityManager
+          import android.content.pm.ApplicationInfo
+          import android.content.Context
+          import android.content.Intent
+          import android.provider.Settings
+          import com.sanju.systemx.shizuku.ShizukuBridge
+
+          class BoostResult(val applied: List<String>, val unavailable: List<String>)
+
+          /**
+           * Real, reversible, non-root optimizations. Intensity:
+           *  40%  - background cleanup via normal Android API (no Shizuku needed)
+           *  60%  - + Shizuku: kill cached processes, per-game PERFORMANCE game mode, game app standby bucket ACTIVE
+           *  80%  - + Shizuku: fixed performance mode (undone on boost off)
+           *  100% - + Shizuku: dexopt (speed-profile compile) of the selected game, runs in background
+           * Nothing is reported as applied unless the call actually succeeded.
+           */
+          class BoostEngine(private val ctx: Context) {
+              private var modePkg: String? = null
+              private var fixedPerf = false
+              private val safePkg = Regex("^[A-Za-z0-9._]+$")
+
+              fun apply(level: Int, game: String?): BoostResult {
+                  val ok = mutableListOf<String>()
+                  val no = mutableListOf<String>()
+                  val pkg = game?.takeIf { safePkg.matches(it) }
+
+                  // --- 40%: background cleanup (normal API) ---
+                  try {
+                      val am = ctx.getSystemService(ActivityManager::class.java)
+                      val before = avail(am)
+                      val n = cleanBackground(am, pkg)
+                      Thread.sleep(500)
+                      val freedMb = (avail(am) - before) / (1024 * 1024)
+                      if (n > 0) ok += "Background cleanup requested for $n apps (available RAM change: ${if (freedMb >= 0) "+" else ""}$freedMb MB)"
+                      else no += "No background apps to clean"
+                  } catch (t: Throwable) { no += "Background cleanup unavailable" }
+
+                  if (level < 60) return BoostResult(ok, no)
+
+                  if (!ShizukuBridge.granted()) {
+                      no += "Deeper optimizations need Shizuku (NOT CONNECTED)"
+                      return BoostResult(ok, no)
+                  }
+
+                  // --- 60%: Shizuku ---
+                  run("am kill-all")?.let { if (it.ok) ok += "Cached background processes killed" else no += "Process cleanup unavailable" }
+                  if (pkg != null) {
+                      if (modePkg != null && modePkg != pkg) run("cmd game reset $modePkg")
+                      val r = run("cmd game mode performance $pkg")?.takeIf { it.ok } ?: run("cmd game set --mode 2 $pkg")
+                      if (r != null && r.ok) { modePkg = pkg; ok += "Game mode set to PERFORMANCE for selected game" }
+                      else no += "Game mode: NOT SUPPORTED ON THIS DEVICE"
+                      val b = run("am set-standby-bucket $pkg active")
+                      if (b != null && b.ok) ok += "Game app standby bucket set to ACTIVE" else no += "Standby bucket unavailable"
+                  } else no += "Select a game for per-game optimizations"
+
+                  if (level < 80) return BoostResult(ok, no)
+
+                  // --- 80%: fixed performance mode (reverted in stop()) ---
+                  val f = run("cmd power set-fixed-performance-mode-enabled true")
+                  if (f != null && f.ok) { fixedPerf = true; ok += "Fixed performance mode enabled" }
+                  else no += "Fixed performance mode: NOT SUPPORTED ON THIS DEVICE"
+
+                  if (level < 100) return BoostResult(ok, no)
+
+                  // --- 100%: dexopt the game in background ---
+                  if (pkg != null) {
+                      Thread { try { run("cmd package compile -m speed-profile -f $pkg") } catch (t: Throwable) { } }.start()
+                      ok += "Game code optimization requested (runs in background)"
+                  } else no += "Code optimization needs a selected game"
+                  return BoostResult(ok, no)
+              }
+
+              /** Undo what apply() changed. */
+              fun stop() {
+                  try {
+                      if (fixedPerf) { run("cmd power set-fixed-performance-mode-enabled false"); fixedPerf = false }
+                      modePkg?.let { run("cmd game reset $it"); modePkg = null }
+                  } catch (t: Throwable) { }
+              }
+
+              private fun run(cmd: String) = ShizukuBridge.run(cmd)
+              private fun avail(am: ActivityManager) = ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }.availMem
+
+              private fun cleanBackground(am: ActivityManager, game: String?): Int {
+                  val pm = ctx.packageManager
+                  val home = pm.resolveActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), 0)?.activityInfo?.packageName
+                  val ime = Settings.Secure.getString(ctx.contentResolver, "default_input_method")?.substringBefore('/')
+                  val skip = setOf(ctx.packageName, game, home, ime, "moe.shizuku.privileged.api")
+                  var n = 0
+                  for (a in pm.getInstalledApplications(0)) {
+                      if ((a.flags and ApplicationInfo.FLAG_SYSTEM) != 0 || a.packageName in skip) continue
+                      am.killBackgroundProcesses(a.packageName); n++
+                  }
+                  return n
+              }
+          }
+          EOF
+          mkdir -p app/src/main/java/com/sanju/systemx/settings
+          cat > app/src/main/java/com/sanju/systemx/settings/PreferencesManager.kt <<'EOF'
+          package com.sanju.systemx.settings
+
+          import android.content.Context
+
+          class Prefs(ctx: Context) {
+              private val sp = ctx.getSharedPreferences("sanju_systemx", Context.MODE_PRIVATE)
+              private fun b(k: String, d: Boolean) = sp.getBoolean(k, d)
+              private fun s(k: String, v: Boolean) = sp.edit().putBoolean(k, v).apply()
+
+              var sound: Boolean get() = b("sound", true); set(v) = s("sound", v)
+              var haptic: Boolean get() = b("haptic", true); set(v) = s("haptic", v)
+              var autoBoost: Boolean get() = b("autoBoost", false); set(v) = s("autoBoost", v)
+              var anim: Boolean get() = b("anim", true); set(v) = s("anim", v)
+              var monitor: Boolean get() = b("monitor", true); set(v) = s("monitor", v)
+              var vivid: Boolean get() = b("vivid", false); set(v) = s("vivid", v)
+              var cinematic: Boolean get() = b("cinematic", false); set(v) = s("cinematic", v)
+              var contrast: Boolean get() = b("contrast", false); set(v) = s("contrast", v)
+              var showAll: Boolean get() = b("showAll", false); set(v) = s("showAll", v)
+              var boostLevel: Int
+                  get() = sp.getInt("boostLevel", 60)
+                  set(v) = sp.edit().putInt("boostLevel", v).apply()
+          }
+          EOF
+          mkdir -p app/src/main/java/com/sanju/systemx/shizuku
+          cat > app/src/main/java/com/sanju/systemx/shizuku/ShizukuBridge.kt <<'EOF'
+          package com.sanju.systemx.shizuku
+
+          import android.content.pm.PackageManager
+          import rikka.shizuku.Shizuku
+
+          class ShellResult(val code: Int, val out: String) {
+              val ok: Boolean get() = code == 0 && !out.contains("Exception") &&
+                  !out.contains("Unknown command") && !out.contains("Error")
+          }
+
+          /** Every call is safe when Shizuku is missing/stopped: returns false/null. */
+          object ShizukuBridge {
+              const val REQ = 4242
+
+              fun running(): Boolean = try { Shizuku.pingBinder() } catch (t: Throwable) { false }
+
+              fun granted(): Boolean = try {
+                  running() && !Shizuku.isPreV11() &&
+                      Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
+              } catch (t: Throwable) { false }
+
+              fun requestPermission(): Boolean = try {
+                  if (running() && !granted()) { Shizuku.requestPermission(REQ); true } else false
+              } catch (t: Throwable) { false }
+
+              /** Runs a shell command (shell uid) through Shizuku. Blocking: call off the main thread. */
+              fun run(cmd: String): ShellResult? {
+                  if (!granted()) return null
+                  return try {
+                      val m = Shizuku::class.java.getDeclaredMethod(
+                          "newProcess", Array<String>::class.java, Array<String>::class.java, String::class.java)
+                      m.isAccessible = true
+                      val p = m.invoke(null, arrayOf("sh", "-c", cmd), null, null) as Process
+                      val out = p.inputStream.bufferedReader().readText()
+                      val err = p.errorStream.bufferedReader().readText()
+                      ShellResult(p.waitFor(), (out + err).trim())
+                  } catch (t: Throwable) {
+                      ShellResult(-1, t.message ?: "error")
+                  }
+              }
+          }
+          EOF
+          mkdir -p app/src/main/java/com/sanju/systemx/ui
+          cat > app/src/main/java/com/sanju/systemx/ui/Ui.kt <<'EOF'
+          package com.sanju.systemx.ui
+
+          import android.content.Context
+          import android.graphics.Color
+          import android.graphics.Typeface
+          import android.graphics.drawable.GradientDrawable
+          import android.view.View
+          import android.view.ViewGroup
+          import android.widget.LinearLayout
+          import android.widget.TextView
+
+          object C {
+              val BG = Color.parseColor("#050805")
+              val CARD = Color.parseColor("#0E1A12")
+              val GREEN = Color.parseColor("#00FF88")
+              val DARKGREEN = Color.parseColor("#0A3D26")
+              val DIM = Color.parseColor("#7FA38C")
+              val WHITE = Color.parseColor("#E8FFF0")
+              val WARN = Color.parseColor("#FF5A5A")
+          }
+
+          fun Context.dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
+
+          fun Context.shape(fill: Int, stroke: Int, radiusDp: Int, strokeDp: Int = 1) = GradientDrawable().apply {
+              setColor(fill); cornerRadius = dp(radiusDp).toFloat(); setStroke(dp(strokeDp), stroke)
+          }
+
+          fun Context.tv(t: String, sp: Float, color: Int, bold: Boolean = false, glow: Boolean = false) = TextView(this).apply {
+              text = t; textSize = sp; setTextColor(color)
+              if (bold) typeface = Typeface.DEFAULT_BOLD
+              if (glow) setShadowLayer(dp(8).toFloat(), 0f, 0f, C.GREEN)
+          }
+
+          fun lp(w: Int, h: Int, wt: Float = 0f, l: Int = 0, t: Int = 0, r: Int = 0, b: Int = 0) =
+              LinearLayout.LayoutParams(w, h, wt).apply { setMargins(l, t, r, b) }
+
+          const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
+          const val WRAP = ViewGroup.LayoutParams.WRAP_CONTENT
+
+          /** Pill-style chip/button used for tabs, boost levels, refresh rates. */
+          fun Context.chip(label: String, selected: Boolean): TextView = tv(label, 13f, if (selected) C.BG else C.GREEN, true).apply {
+              gravity = android.view.Gravity.CENTER
+              setPadding(dp(14), dp(8), dp(14), dp(8))
+              background = shape(if (selected) C.GREEN else C.CARD, C.GREEN, 18)
+          }
+
+          fun View.styleChip(selected: Boolean, ctx: Context) {
+              (this as TextView).setTextColor(if (selected) C.BG else C.GREEN)
+              background = ctx.shape(if (selected) C.GREEN else C.CARD, C.GREEN, 18)
+          }
+          EOF
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: 8.7 }
+      - run: gradle assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SanjuSystemX-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
